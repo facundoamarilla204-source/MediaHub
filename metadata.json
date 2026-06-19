@@ -1,0 +1,6 @@
+{
+  "name": "MediaHub",
+  "description": "Plataforma profesional para descargar contenido multimedia de múltiples servicios (TikTok, Instagram, YouTube, Facebook) de forma rápida y sencilla.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
