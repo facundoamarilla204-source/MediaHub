@@ -21,5 +21,8 @@ RUN npm run build
 # Exponer el puerto
 EXPOSE 3000
 
+# Set environment to production to prevent Vite dev server from running
+ENV NODE_ENV=production
+
 # Arrancar el servidor
 CMD ["npm", "run", "start"]
