@@ -52,8 +52,37 @@ export async function handleMediaDownload(
   }
 
   try {
-    // Wait for the full download and merge to complete
-    await youtubedl(url, flags);
+    // We use .exec instead of the default promise to get access to the child process
+    const child = youtubedl.exec(url, flags);
+    let isAborted = false;
+
+    // Intercept when the user closes the browser tab or aborts download
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        isAborted = true;
+        console.log(`[Abortado] El usuario cerró la conexión. Matando proceso yt-dlp de: ${url}`);
+        
+        // Try to kill the process gracefully first, then force kill
+        child.kill('SIGTERM');
+        setTimeout(() => child.kill('SIGKILL'), 3000);
+        
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlink(tempFilePath, () => {});
+        }
+      }
+    });
+
+    // Wrap the child process in a Promise to await its completion
+    await new Promise((resolve, reject) => {
+      child.on('close', (code) => {
+        if (isAborted) return reject(new Error('Abortado por el usuario'));
+        if (code === 0) resolve(true);
+        else reject(new Error(`yt-dlp process exited with code ${code}`));
+      });
+      child.on('error', (err) => reject(err));
+    });
+
+    if (isAborted) return;
 
     // If file exists, set headers and pipe it to the browser
     if (fs.existsSync(tempFilePath)) {
@@ -79,17 +108,16 @@ export async function handleMediaDownload(
         if (fs.existsSync(tempFilePath)) fs.unlink(tempFilePath, () => {});
       });
 
-      // Cleanup if the connection drops unexpectedly
-      res.on('close', () => {
-        if (fs.existsSync(tempFilePath)) {
-          fs.unlink(tempFilePath, () => {});
-        }
-      });
     } else {
       throw new Error('Temp file was not created by yt-dlp');
     }
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'Abortado por el usuario') {
+      // Don't send error headers if user aborted
+      return;
+    }
+    
     console.error('yt-dlp processing/merging error:', error);
     if (fs.existsSync(tempFilePath)) {
       fs.unlink(tempFilePath, () => {});

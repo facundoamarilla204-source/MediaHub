@@ -2,6 +2,13 @@ import youtubedl from 'youtube-dl-exec';
 import { detectPlatform } from './detectPlatform';
 import { MediaMetadata, MediaQuality } from '../types';
 
+interface CacheEntry {
+  data: MediaMetadata;
+  timestamp: number;
+}
+const metadataCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 function formatBytes(bytes?: number): string {
   if (!bytes) return 'N/A';
   const mb = bytes / (1024 * 1024);
@@ -16,6 +23,18 @@ function formatDuration(seconds?: number): string {
 }
 
 export async function fetchMetadata(url: string): Promise<MediaMetadata> {
+  // 1. Revisar Caché en Memoria
+  const now = Date.now();
+  if (metadataCache.has(url)) {
+    const cached = metadataCache.get(url)!;
+    if (now - cached.timestamp < CACHE_TTL_MS) {
+      console.log(`[Cache HIT] Sirviendo metadatos cacheados para: ${url}`);
+      return cached.data;
+    } else {
+      metadataCache.delete(url); // Expiró
+    }
+  }
+
   const { platform } = detectPlatform(url);
 
   try {
@@ -98,7 +117,7 @@ export async function fetchMetadata(url: string): Promise<MediaMetadata> {
       });
     }
 
-    return {
+    const resultData: MediaMetadata = {
       url,
       title: info.title || 'Video Multimedia',
       description: info.description,
@@ -108,6 +127,11 @@ export async function fetchMetadata(url: string): Promise<MediaMetadata> {
       author: info.uploader || info.channel || info.creator || 'Autor',
       qualities
     };
+
+    // Guardar en caché antes de retornar
+    metadataCache.set(url, { data: resultData, timestamp: Date.now() });
+
+    return resultData;
 
   } catch (error: any) {
     console.error('yt-dlp extract error:', error);
